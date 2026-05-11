@@ -20,7 +20,7 @@ A personal knowledge base with an AI layer on top. Capture raw thoughts with zer
 ## Users
 
 - **Primary:** Haarthi (personal use)
-- **Work:** Notes at Anchorage Digital — separate instance (`~/Work-Notes/`), separate MCP server, separate OAuth, separate `.categories.yaml`. Both instances run concurrently; content is routed to one or the other based on entity/context.
+- **Work:** Work Notes — separate instance (`~/Work-Notes/`), separate MCP server, separate OAuth, separate `.categories.yaml`. Both instances run concurrently; content is routed to one or the other based on entity/context.
 
 ---
 
@@ -80,7 +80,7 @@ Two independent instances. Each has its own server, OAuth, `.categories.yaml`, a
     sarah-chen.md
     alex-mentor.md
 
-~/Work-Notes/                    ← work instance (Anchorage)
+~/Work-Notes/                    ← work instance (Work)
   .categories.yaml
   _inbox/
   1on1s/                         ← same category name, different entities
@@ -477,7 +477,7 @@ Six tools exposed to Claude via the MCP server:
 ### P2 — Future
 - **Scoped passive retrieval (Level 2):** Claude auto-queries notes on personal context signals without explicit ask. Deferred pending Level 1 usage data.
 - **Cowork integration:** Scheduled Cowork tasks for weekly note summaries, action item digests, monthly reviews.
-- **Work notes instance:** Separate `~/Notes/Work/` instance with Anchorage-specific categories, different MCP registration.
+- **Work notes instance:** Separate `~/Notes/Work/` instance with work-specific categories, different MCP registration.
 - **Vector search:** Replace keyword search with semantic/embedding search for better retrieval on fuzzy queries.
 - **Mobile processing:** Cloud relay so iPhone can trigger inbox processing even when Mac is asleep.
 
@@ -498,7 +498,7 @@ Six tools exposed to Claude via the MCP server:
 | Proactive `@save` suggestions from Claude | Risk of noise and false positives; explicit `@save` only for now |
 | Claude auto-creates new categories without confirmation | Risk of taxonomy sprawl from one-off saves; Claude may propose but user must accept before any category is created |
 | Treating entity-based content as topic-based | Loses `entity` as a first-class field — no easy way to query "all 1:1s with anyone" or "all clients I talked to this month" |
-| One unified instance for personal + work | Anchorage compliance separation requires hard boundary; two-instance split is cheap once entity registry exists |
+| One unified instance for personal + work | Work compliance separation requires hard boundary; two-instance split is cheap once entity registry exists |
 | Per-save `@save work` / `@save personal` flag | Adds friction on every save; one-time entity-to-instance decision (recorded in registry) is friction-free thereafter |
 
 ---
