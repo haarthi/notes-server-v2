@@ -1,6 +1,6 @@
 # Notes App — Product Spec
 **Status:** v0.2 spec (refined) — v0.1 build complete
-**Owner:** Adit
+**Owner:** Haarthi
 **Last Updated:** 2026-05-11
 
 ---
@@ -19,8 +19,7 @@ A personal knowledge base with an AI layer on top. Capture raw thoughts with zer
 
 ## Users
 
-- **Primary:** Haarthi (personal use)
-- **Work:** Work Notes — separate instance (`~/Work-Notes/`), separate MCP server, separate OAuth, separate `.categories.yaml`. Both instances run concurrently; content is routed to one or the other based on entity/context.
+- **Personal:** Haarthi (personal use) (`~/Notes/`)
 
 ---
 
@@ -79,20 +78,6 @@ Two independent instances. Each has its own server, OAuth, `.categories.yaml`, a
   1on1s/                         ← example user-added category (entity-based)
     sarah-chen.md
     alex-mentor.md
-
-~/Work-Notes/                    ← work instance (Work)
-  .categories.yaml
-  _inbox/
-  1on1s/                         ← same category name, different entities
-    manager.md
-    direct-report-1.md
-  Clients/
-    acme-corp.md
-  Meetings/
-    weekly-platform-sync.md
-
-~/.notes-registry/
-  entities.yaml                  ← cross-instance entity → instance mapping
 ```
 
 ---
@@ -229,15 +214,6 @@ categories:
     entity_types: [person]
 ```
 
-```yaml
-# ~/Work-Notes/.categories.yaml (work instance)
-instance: work
-categories:
-  1on1s:    { file_unit: entity-based, entity_types: [person] }
-  Clients:  { file_unit: entity-based, entity_types: [client] }
-  Meetings: { file_unit: entity-based, entity_types: [meeting-series] }
-  Projects: { file_unit: topic-based }
-```
 
 ### Creation flow
 
@@ -266,32 +242,7 @@ If the user declines, the flagged entries stay in `_inbox/` marked `[unmatched]`
 - Misfit = below-threshold match against all existing categories' file names + topic/entity fields
 - Cluster = 3+ misfits with high pairwise semantic similarity to each other
 - Suggested file-unit = inferred from cluster shape (per-person → entity-based, per-event → entry-based, etc.)
-- Suggested instance = inferred from entity registry membership of mentioned names
 
-### Cross-instance entity routing
-
-When a save mentions an entity (person, client, meeting series) for the first time, Claude consults the entity registry at `~/.notes-registry/entities.yaml`. If the entity is unknown, Claude asks once in chat:
-
-> *"Is `Sarah Chen` a work or personal contact?"*
-
-The answer is recorded in the registry and used for all future saves involving that entity — no re-asking. The note is then written to the correct instance.
-
-```yaml
-# ~/.notes-registry/entities.yaml
-entities:
-  - name: Sarah Chen
-    type: person
-    instance: work
-    category: 1on1s
-  - name: Alex Mentor
-    type: person
-    instance: personal
-    category: 1on1s
-  - name: Acme Corp
-    type: client
-    instance: work
-    category: Clients
-```
 
 ### Removing or renaming categories
 
@@ -308,7 +259,23 @@ entities:
 |---|---|---|
 | iPhone Notes | iCloud sync to Mac → user appends to `raw.md` | P1 iOS Shortcut reduces to one tap |
 | `raw.md` direct | Manual paste into `~/Notes/_inbox/raw.md`; entries separated by `---` or two blank lines | |
-| Claude chat | User types `@save` at end of conversation | No proactive suggestions, no auto-save |
+| Claude chat | User types `@save` in a message | No proactive suggestions, no auto-save. See `@save` semantics below. |
+
+### `@save` semantics
+
+**Trigger:** literal string match on the token `@save` (case-insensitive) anywhere in the user's most recent message. No intent inference, no paraphrase detection — Claude does nothing unless the literal token appears. This is the cleanest implementation of "no proactive suggestions": predictable beats clever, and it preserves the rejection of proactive `@save` suggestions in [Considered & Rejected](#considered--rejected).
+
+**Scope of save:** Claude reads the whole conversation, identifies the *dominant topical thread*, and writes one structured note about it per the schema (title, 1–2 paragraph summary, key points, action items, links/references). Raw turns never hit disk. If the conversation spans 2+ distinct topics, Claude asks a one-line clarification before writing — e.g. *"This covers refinancing and backyard work — save as one note or two?"* — consistent with the medium-confidence branch of the [save-time decision tree](#save-time-decision-tree-append-vs-new-file).
+
+**Snapshot, not end-marker.** `@save` captures content up to and including the message containing the token. Content after is ignored. The conversation continues normally; `@save` has no side effects on the chat state beyond the file write.
+
+**Multiple `@save`s in one conversation.** Each `@save` re-runs the full save decision tree against current content. So `@save` → keep talking about refinancing → `@save` again usually means append a new dated H2 to the same `refinancing.md` (high match). If the topic has shifted, the second save creates a new file. Treat `@save` as a punctuation mark — "this is worth keeping, mark it now" — rather than a session-end signal.
+
+**Edge cases.**
+
+- **Nothing substantive yet:** if `@save` appears early in a conversation with no real content to capture, Claude replies *"Nothing substantive to save yet — keep chatting"* and skips. No empty notes.
+- **`@save` inside a quoted block or code fence:** still triggers in v0.2. Revisit only if it becomes a problem in practice.
+- **Write failure:** Claude surfaces the would-have-been-saved note inline in chat so nothing is lost, per the existing idempotency rule under [Idempotency & error handling](#idempotency--error-handling).
 
 ### Save contents
 
@@ -374,7 +341,7 @@ When multiple notes match a query, ranking is `topic_match_strength + recency_bo
 
 ### Cross-category queries
 
-If the inferred category is ambiguous (e.g. "what do I think about X" might span Reflection + ProductsIdeas), Claude searches across all categories and includes the best matches regardless of folder.
+If the inferred category is ambiguous (e.g. "what do I think about X" might span Reflection + ProductsIdeas), Claude searches across all categories and includes the best matches regardless of folder. **Capped at top 10 results** by combined `topic_match_strength + recency_boost`. Prevents context-window blowout on broad queries that touch many notes; user can ask for more if 10 isn't enough.
 
 ### Passive retrieval (Level 2)
 
@@ -384,7 +351,7 @@ If the inferred category is ambiguous (e.g. "what do I think about X" might span
 
 ## MCP Tools
 
-Six tools exposed to Claude via the MCP server:
+Seven tools exposed to Claude via the MCP server:
 
 | Tool | What it does |
 |---|---|
@@ -392,6 +359,7 @@ Six tools exposed to Claude via the MCP server:
 | `list_notes` | List notes, optionally filtered by category |
 | `read_note` | Read full content of a specific note |
 | `write_note` | Write a note directly (no inbox processing) |
+| `move_note` | Move a note to a different category (and/or rename the file). Updates `category` in frontmatter, bumps `last_updated`, and relocates the file. Powers lazy correction (*"move this note to ProductsIdeas"*) without manual file shuffling. |
 | `process_inbox` | Process `raw.md` — structure, categorize, append-or-create per save-time decision tree, archive to `_inbox/processed/YYYY-MM.md`, clear `raw.md` |
 | `save_conversation` | Summarize current Claude conversation and save as note following the schema |
 
@@ -420,67 +388,26 @@ Six tools exposed to Claude via the MCP server:
 
 ---
 
-## Current State (v0.1 build)
-
-### Working
-- [x] Notes MCP server running locally on port 8765
-- [x] Cloudflare tunnel exposing server to claude.ai
-- [x] OAuth 2.0 + PKCE handshake with claude.ai
-- [x] All 5 category folders created at `~/Notes/`
-- [x] `search_notes`, `list_notes`, `read_note`, `write_note` tools working
-- [x] `process_inbox` tool working (destructive clear — pre-v0.2)
-- [x] `save_conversation` (@save) working
-- [x] Obsidian pointed at `~/Notes/`
-
-### Known Issues
-- [ ] Cloudflare quick tunnel URL rotates on every server restart — requires re-adding URL to claude.ai settings each session
-
----
-
-## v0.2 Build Items (from this spec refinement)
-
-**Schema & save:**
-- [ ] Implement per-category file-unit defaults (hybrid map)
-- [ ] Implement entity-based file-unit pattern (`entity` + `entity_type` frontmatter, entity-name matching)
-- [ ] Implement semantic-match append decision tree in `process_inbox` and `save_conversation`
-- [ ] Implement medium-confidence confirmation prompt
-- [ ] Implement reverse-chronological dated H2 append format
-- [ ] Implement inbox archival to `_inbox/processed/YYYY-MM.md` (replace destructive clear)
-- [ ] Add `last_updated` frontmatter field; update on every append
-
-**Retrieval:**
-- [ ] Implement recency-weighted ranking in `search_notes`
-- [ ] Update retrieval responses to cite source notes
-- [ ] Add `entity:` filter to `search_notes` / `list_notes`
-
-**Categories & instances:**
-- [ ] Add `~/Notes/.categories.yaml` as source of truth; server reads on startup + SIGHUP
-- [ ] Chat command to create category (updates `.categories.yaml`, creates folder)
-- [ ] Claude-proposes-new-category flow during `process_inbox`: cluster-detection on misfits, propose at end of processing, require user confirmation before commit
-- [ ] `[unmatched]` flag on declined-cluster inbox entries; threshold reset logic
-- [ ] Subfolder-grouping proposal when threshold (5 files) hit on related sub-theme
-- [ ] Stand up second instance: `~/Work-Notes/` with its own server, OAuth, `.categories.yaml`
-- [ ] Build `~/.notes-registry/entities.yaml` and one-time entity-to-instance prompt flow
-- [ ] One-shot migration tool for renaming categories (rewrites frontmatter)
-
----
-
-## Enhancements Backlog
+## Future Roadmap
 
 ### P0 — Immediate
 - **Persistent server URL:** Replace Cloudflare quick tunnel with a named tunnel (or ngrok static domain). Combine with macOS launchd auto-start so server runs on boot. One-time setup, permanent fix.
 
 ### P1 — Next
-- **iPhone shortcut:** iOS Shortcut that appends typed/dictated text directly to `~/Notes/_inbox/raw.md` via iCloud. Reduces capture friction to one tap.
+
 - **Inbox auto-processing:** Optional cron job to process inbox on a schedule (e.g. nightly) rather than requiring manual trigger.
+- **Cowork integration:** Scheduled Cowork tasks for weekly note summaries, action item digests, monthly reviews.
 
 ### P2 — Future
-- **Scoped passive retrieval (Level 2):** Claude auto-queries notes on personal context signals without explicit ask. Deferred pending Level 1 usage data.
-- **Cowork integration:** Scheduled Cowork tasks for weekly note summaries, action item digests, monthly reviews.
-- **Work notes instance:** Separate `~/Notes/Work/` instance with work-specific categories, different MCP registration.
-- **Vector search:** Replace keyword search with semantic/embedding search for better retrieval on fuzzy queries.
-- **Mobile processing:** Cloud relay so iPhone can trigger inbox processing even when Mac is asleep.
 
+- **Scoped passive retrieval (Level 2):** Claude auto-queries notes on personal context signals without explicit ask. Deferred pending Level 1 usage data.
+- **Mobile (iPhone) shortcut:** iOS Shortcut that appends typed/dictated text directly to `~/Notes/_inbox/raw.md` via iCloud. Reduces capture friction to one tap. Cloud relay so iPhone can trigger inbox processing even when Mac is asleep.
+- **Work notes instance:** Separate `~/Notes/Work/` instance with work-specific categories, different MCP registration.
+- **Entity registry & cross-instance entity mapping:** `~/.notes-registry/entities.yaml` holding the cross-instance entity → instance mapping (e.g. "Sarah Chen" → personal, "Acme Corp" → work). Drives one-time entity-to-instance decisions so per-save flags aren't needed, and feeds the category-proposal heuristic ("Suggested instance = inferred from entity registry membership"). Coupled with the work-notes-instance item — both land together. Open question: lifecycle when an entity changes role (e.g. client → friend) — manual edit of `entities.yaml` or chat command?
+- **Save-flow performance tuning:** The save-time decision tree (infer category → list files → read frontmatter + first H2 of each → score semantic similarity) is fine at 5 notes per category and unworkable at 50. Set a latency budget for `@save`, define a max-file fanout, and decide whether scoring is a single batched prompt or N-of-K calls. Revisit once any category crosses ~30 files in practice.
+- **Backup strategy (Git):** `~/Notes/` is the single source of truth — local markdown. Add a git-based backup: init the directory as a repo, auto-commit on `process_inbox` and `save_conversation` completion (and/or a periodic launchd job), push to a private remote. Gives version history, off-machine durability, and one-command rollback if categorization or a move ever corrupts a file. Alternatives considered: Time Machine (no off-machine), iCloud Drive (no version history beyond a few days).
+- **`@save` flag overrides:** Accept `@save Finance` or `@save #tag` as an explicit override on top of silent inference. Useful when Claude's inferred category is consistently off for a given content type.
+- **Reflection weekly review prompt:** Weekly Cowork scheduled task that prompts a Reflection review — surfaces the current month's `Reflection/YYYY-MM.md` for re-reading or augmentation. Extends the P1 Cowork integration item.
 ---
 
 ## Considered & Rejected
@@ -500,18 +427,13 @@ Six tools exposed to Claude via the MCP server:
 | Treating entity-based content as topic-based | Loses `entity` as a first-class field — no easy way to query "all 1:1s with anyone" or "all clients I talked to this month" |
 | One unified instance for personal + work | Work compliance separation requires hard boundary; two-instance split is cheap once entity registry exists |
 | Per-save `@save work` / `@save personal` flag | Adds friction on every save; one-time entity-to-instance decision (recorded in registry) is friction-free thereafter |
+| Entity disambiguation prompts (same first name) | Not needed at single-user personal scale; defer until multiple same-named entities actually appear in practice |
 
 ---
 
 ## Open Questions
 
-- Should the `@save` command accept flags like `@save Finance` or `@save #tag` as an explicit override on top of silent inference?
-- What's the right review cadence for Reflection notes — weekly Cowork prompt? Tied to Reflection's monthly time-bucket structure.
-- Semantic-match confidence thresholds: what's "high" vs "medium" empirically? Tune during v0.2 build.
-- For ProfessionalDev mixed mode (entry vs topic-based), is the trigger article-vs-thread keyword detection, or something more reliable?
-- **Entity disambiguation:** two contacts with the same first name — how does Claude prompt? (e.g. *"Did you mean Sarah Chen or Sarah Liu?"*)
-- **Cross-instance retrieval:** when you ask "what are my open action items from 1:1s this week", does Claude query both instances and merge, or do you specify? Default behavior + override.
-- **Entity registry lifecycle:** what happens when an entity changes role (e.g. someone moves from a client to a personal friend)? Manual edit of `entities.yaml`, or a chat command?
+Architectural questions that remain unresolved. Build-time tuning concerns (semantic-match thresholds, category-proposal cluster thresholds) are noted inline in the relevant sections — they'll be calibrated empirically during the v0.2 build, not debated here. Resolved/deferred questions have moved to [`todo.md`](./todo.md) backlog or [Considered & Rejected](#considered--rejected).
+
+- **Cross-instance retrieval *(v2)*:** when you ask "what are my open action items from 1:1s this week", does Claude query both instances and merge, or do you specify? Default behavior + override.
 - **Meeting one-offs:** when a meeting has no recurring series, does the entry-based `YYYY-MM-DD-slug.md` go in `Meetings/` flat, or in a `Meetings/one-offs/` subfolder?
-- **Category-proposal tuning:** what's the right misfit cluster threshold — 3 entries, 5, more? What's the right "below-threshold" match score to flag an entry as misfit? Calibrate empirically during v0.2 build.
-- **Repeated declines:** if you decline the same proposed category twice, should Claude permanently suppress that cluster, or keep re-asking when the cluster grows further?
