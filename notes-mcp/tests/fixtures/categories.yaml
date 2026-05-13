@@ -1,0 +1,15 @@
+instance: personal
+categories:
+  Finance:
+    file_unit: topic-based
+  HomeImprovement:
+    file_unit: topic-based
+  Reflection:
+    file_unit: monthly-bucket
+  ProductsIdeas:
+    file_unit: topic-based
+  ProfessionalDev:
+    file_unit: mixed
+    rules:
+      articles: entry-based
+      threads: topic-based

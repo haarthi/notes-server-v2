@@ -1,11 +1,7 @@
 # Notes App — Product Spec
 **Status:** v0.2 spec (refined) — v0.1 build complete
 **Owner:** Haarthi
-**Last Updated:** 2026-05-12
-
-> **Companions:**
-> - [architecture.md](./architecture.md) — project skeleton, stack, cross-cutting gotchas
-> - [milestones/](./milestones/) — milestone plan (M1–M5) with acceptance criteria and test plans
+**Last Updated:** 2026-05-11
 
 ---
 
@@ -353,26 +349,10 @@ Seven tools exposed to Claude via the MCP server:
 
 ---
 
-## Implementation
-
-The v0.2 build is broken into five releasable milestones. Each milestone has its own acceptance criteria and test plan in [milestones/](./milestones/):
-
-| # | File | What it unlocks |
-|---|---|---|
-| M1 | [Foundation](./milestones/M1-foundation.md) | One tool callable from claude.ai over the internet (`write_note` end-to-end) |
-| M2 | [Read](./milestones/M2-read.md) | List, search, ask questions, cited prose answers |
-| M3 | [Smart Save](./milestones/M3-smart-save.md) | `@save` with append-vs-new decision tree |
-| M4 | [Persistence + Inbox](./milestones/M4-persistence-inbox.md) | Stable URL across reboots; `process_inbox` |
-| M5 | [Lifecycle](./milestones/M5-lifecycle.md) | Move notes, add categories, group into subfolders |
-
-Project skeleton and stack choices live in [architecture.md](./architecture.md).
-
----
-
 ## Future Roadmap
 
 ### P0 — Immediate
-- **Persistent server URL:** Replace Cloudflare quick tunnel with a named tunnel (or ngrok static domain). Combine with macOS launchd auto-start so server runs on boot. One-time setup, permanent fix. *(Tracked as M4 / I4.)*
+- **Persistent server URL:** Replace Cloudflare quick tunnel with a named tunnel (or ngrok static domain). Combine with macOS launchd auto-start so server runs on boot. One-time setup, permanent fix.
 
 ### P1 — Next
 
